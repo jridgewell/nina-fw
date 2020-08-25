@@ -41,9 +41,6 @@ void loop(void);
 } // extern "C"
 #endif
 
-#ifdef __cplusplus
-  #include "WMath.h"
-#endif
 #include "delay.h"
 
 #include "wiring_digital.h"
