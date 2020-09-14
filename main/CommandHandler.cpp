@@ -27,6 +27,9 @@
 
 #include "CommandHandler.h"
 
+#include <BearSSLClient.h>
+#include <BearSSLTrustAnchors.h>
+
 #include "esp_log.h"
 
 const char FIRMWARE_VERSION[6] = "1.4.1";
@@ -37,9 +40,11 @@ const char FIRMWARE_VERSION[6] = "1.4.1";
 uint8_t socketTypes[MAX_SOCKETS];
 WiFiClient tcpClients[MAX_SOCKETS];
 WiFiUDP udps[MAX_SOCKETS];
-WiFiSSLClient tlsClients[MAX_SOCKETS];
+/* WiFiSSLClient tlsClients[MAX_SOCKETS]; */
 WiFiServer tcpServers[MAX_SOCKETS];
 
+WiFiClient wifi_client;
+BearSSLClient ssl_client(wifi_client, ArduinoIoTCloudTrustAnchor, ArduinoIoTCloudTrustAnchor_NUM);
 
 int setNet(const uint8_t command[], uint8_t response[])
 {
@@ -486,7 +491,7 @@ int availDataTcp(const uint8_t command[], uint8_t response[])
   } else if (socketTypes[socket] == 0x01) {
     available = udps[socket].available();
   } else if (socketTypes[socket] == 0x02) {
-    available = tlsClients[socket].available();
+    available = ssl_client.available();
   }
 
   response[2] = 1; // number of parameters
@@ -519,9 +524,9 @@ int getDataTcp(const uint8_t command[], uint8_t response[])
     }
   } else if (socketTypes[socket] == 0x02) {
     if (peek) {
-      response[4] = tlsClients[socket].peek();
+      response[4] = ssl_client.peek();
     } else {
-      response[4] = tlsClients[socket].read();
+      response[4] = ssl_client.read();
     }
   }
 
@@ -601,10 +606,18 @@ int startClientTcp(const uint8_t command[], uint8_t response[])
     int result;
 
     if (host[0] != '\0') {
-      result = tlsClients[socket].connect(host, port);
+      ESP_LOGI("CommandHandler::startClientTcp", "BearSSL connecting %s:%d", host, port);
+      result = ssl_client.connect(host, port);
     } else {
-      result = tlsClients[socket].connect(ip, port);
+      ESP_LOGI("CommandHandler::startClientTcp", "BearSSL connecting %d:%d", ip, port);
+      result = ssl_client.connect(ip, port);
     }
+
+    if (!result)
+      ESP_LOGI("CommandHandler::startClientTcp", "BearSSL error = %d", ssl_client.errorCode());
+    else
+      ESP_LOGI("CommandHandler::startClientTcp", "BearSSL connect SUCCESS, socket = %d", socket);
+    
 
     if (result) {
       socketTypes[socket] = 0x02;
@@ -639,7 +652,7 @@ int stopClientTcp(const uint8_t command[], uint8_t response[])
 
     socketTypes[socket] = 255;
   } else if (socketTypes[socket] == 0x02) {
-    tlsClients[socket].stop();
+    ssl_client.stop();
 
     socketTypes[socket] = 255;
   }
@@ -660,7 +673,7 @@ int getClientStateTcp(const uint8_t command[], uint8_t response[])
 
   if ((socketTypes[socket] == 0x00) && tcpClients[socket].connected()) {
     response[4] = 4;
-  } else if ((socketTypes[socket] == 0x02) && tlsClients[socket].connected()) {
+  } else if ((socketTypes[socket] == 0x02) && ssl_client.connected()) {
     response[4] = 4;
   } else {
     socketTypes[socket] = 255;
@@ -783,8 +796,8 @@ int getRemoteData(const uint8_t command[], uint8_t response[])
     ip = udps[socket].remoteIP();
     port = udps[socket].remotePort();
   } else if (socketTypes[socket] == 0x02) {
-    ip = tlsClients[socket].remoteIP();
-    port = tlsClients[socket].remotePort();
+    ip = wifi_client.remoteIP();
+    port = wifi_client.remotePort();
   }
 
   response[2] = 2; // number of parameters
@@ -970,7 +983,7 @@ int sendDataTcp(const uint8_t command[], uint8_t response[])
   } else if (socketTypes[socket] == 0x00) {
     written = tcpClients[socket].write(&command[8], length);
   } else if (socketTypes[socket] == 0x02) {
-    written = tlsClients[socket].write(&command[8], length);
+    written = ssl_client.write(&command[8], length);
   }
 
   response[2] = 1; // number of parameters
@@ -994,7 +1007,7 @@ int getDataBufTcp(const uint8_t command[], uint8_t response[])
   } else if (socketTypes[socket] == 0x01) {
     read = udps[socket].read(&response[5], length);
   } else if (socketTypes[socket] == 0x02) {
-    read = tlsClients[socket].read(&response[5], length);
+    read = ssl_client.read(&response[5], length);
   }
 
   if (read < 0) {
@@ -1582,7 +1595,7 @@ void CommandHandlerClass::updateGpio0Pin()
       break;
     }
 
-    if (socketTypes[i] == 0x02 && tlsClients[i] && tlsClients[i].connected() && tlsClients[i].available()) {
+    if (socketTypes[i] == 0x02 && ssl_client.connected() && ssl_client.available()) {
       available = 1;
       break;
     }
