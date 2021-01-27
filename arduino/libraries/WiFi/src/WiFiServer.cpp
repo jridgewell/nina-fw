@@ -55,14 +55,12 @@ void WiFiServer::begin()
   addr.sin_port = htons(_port);
 
   if (lwip_bind(_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-    lwip_close_r(_socket);
-    _socket = -1;
+    stop();
     return;
   }
 
   if (lwip_listen(_socket, 1) < 0) {
-    lwip_close_r(_socket);
-    _socket = -1;
+    stop();
     return;
   }
 
@@ -134,6 +132,19 @@ size_t WiFiServer::write(const uint8_t *buffer, size_t size)
   }
 
   return written;
+}
+
+void WiFiServer::stop()
+{
+  lwip_close_r(_socket);
+  _socket = -1;
+  for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) {
+    if (_spawnedSockets[i] != -1) {
+      WiFiClient c(_spawnedSockets[i]);
+      c.stop();
+      _spawnedSockets[i] = -1;
+    }
+  }
 }
 
 WiFiServer::operator bool()

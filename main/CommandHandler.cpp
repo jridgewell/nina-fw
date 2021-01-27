@@ -29,7 +29,7 @@
 
 #include "esp_log.h"
 
-const char FIRMWARE_VERSION[6] = "1.4.1";
+const char FIRMWARE_VERSION[6] = "1.5.0";
 
 /*IPAddress*/uint32_t resolvedHostname;
 
@@ -1618,18 +1618,18 @@ void CommandHandlerClass::handleWiFiDisconnect()
   // close all non-listening sockets
 
   for (int i = 0; i < CONFIG_LWIP_MAX_SOCKETS; i++) {
-    struct sockaddr_in addr; 
-    size_t addrLen = sizeof(addr);
-    int socket = LWIP_SOCKET_OFFSET + i;
-
-    if (lwip_getsockname(socket, (sockaddr*)&addr, &addrLen) < 0) {
-      continue;
+    if (socketTypes[i] == 0x00) {
+      if (tcpServers[i]) {
+        tcpServers[i].stop();
+      } else {
+        tcpClients[i].stop();
+      }
+    } else if (socketTypes[i] == 0x01) {
+      udps[i].stop();
+    } else if (socketTypes[i] == 0x02) {
+      tlsClients[i].stop();
     }
-
-    if (addr.sin_addr.s_addr != 0) {
-      // non-listening socket, close
-      close(socket);
-    }
+    socketTypes[i] = 255;
   }
 }
 

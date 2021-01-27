@@ -39,6 +39,7 @@ public:
 
   // using Print::write;
 
+  void stop();
   virtual operator bool();
 
 private:
